@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Supzy Sample Visualizations</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script src="js/libs/jquery/jquery.min.js" type="text/javascript"></script>
+        <script src="js/libs/jquery-csv/jquery.csv-0.71.min.js" type="text/javascript"></script>
+        <script src="js/libs/knockout/knockout-min.js" type="text/javascript"></script>        
+        <script src="js/libs/d3/d3.min.js" type="text/javascript"></script>
+        <script src="js/d3.layout.cloud.js" type="text/javascript"></script>
+    </head>
+    <body>
+        <input type="file" id="inputCSV" data-bind="event:{change:function(){loadFile($element.files[0]);}}"/>
+        <div id="drawArea"></div>
+        <script type="text/javascript">
+            function ViewModel() {
+                var self = this;
+                self.loadFile = function(file) {
+                    var reader = new FileReader();
+                    var content = reader.readAsText(file);
+                    reader.onload = function(event) {
+                        var csv = event.target.result;
+                        var data = $.csv.toArrays(csv);
+                        data = data.slice(1); // skip the header row.
+                        // Count tokens via object shortcut, convert back to 
+                        // array, and sort to get top ranks.
+                        var countMe = data.reduce(function(map, entry) {
+                            var entryDate = new Date(entry[1]);
+                            var hour = entryDate.getHours();
+                            map[hour] = (map[hour] || 0) + 1;
+                            return map;
+                        }, Object.create(null));
+
+                        var result = new Array();
+                        for (var hour in countMe) {
+                            result.push({'hour': hour, 'count': countMe[hour]});
+                        }
+                        
+                        renderData(result);
+
+                    };
+                    reader.onerror = function() {
+                        alert('Unable to read ' + file.fileName);
+                    };
+                };
+            }
+
+            function renderData(data) {
+                // Set our margins
+                var margin = {
+                    top: 20,
+                    right: 20,
+                    bottom: 50,
+                    left: 60
+                },
+                width = 700 - margin.left - margin.right,
+                        height = 350 - margin.top - margin.bottom;
+
+                // Our X scale
+                var x = d3.scale.ordinal().rangeRoundBands([0, width], .1);
+
+                // Our Y scale
+                var y = d3.scale.linear().rangeRound([height, 0]);
+
+                // Our color bands
+                var color = d3.scale.ordinal().range(["#308fef", "#5fa9f3", "#1176db"]);
+
+                // Use our X scale to set a bottom axis
+                var xAxis = d3.svg.axis()
+                        .scale(x)
+                        .orient("bottom");
+
+                // Same for our left axis
+                var yAxis = d3.svg.axis()
+                        .scale(y)
+                        .orient("left")
+                        .tickFormat(d3.format(".2s"));
+                
+                // Add our chart to the #chart div
+                var svg = d3.select("#drawArea").append("svg")
+                    .attr("width", width + margin.left + margin.right)
+                    .attr("height", height + margin.top + margin.bottom)
+                    .append("g")
+                    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+            
+                // Our X domain is our set of years
+                x.domain(data.map(function (d) {
+                    return d.hour;
+                }));
+
+                // Our Y domain is from zero to our highest total
+                y.domain([0, d3.max(data, function (d) {
+                    return d.count;
+                })]);
+            
+                // Map our columns to our colors
+                color.domain(d3.keys(data[0]).filter(function (key) {
+                    return key !== "hour";
+                }));
+
+                data.forEach(function (d) {
+                    var y0 = 0;
+                    d.types = color.domain().map(function (name) {
+                        return {
+                            name: name,
+                            y0: y0,
+                            y1: y0 += +d[name]
+                        };
+                    });
+                    d.total = d.types[d.types.length - 1].y1;
+                });
+            
+                svg.append("g")
+                    .attr("class", "x axis")
+                    .attr("transform", "translate(0," + height + ")")
+                    .call(xAxis);
+
+                svg.append("g")
+                    .attr("class", "y axis")
+                    .call(yAxis);
+            
+                var hour = svg.selectAll(".hour")
+                    .data(data)
+                    .enter().append("g")
+                    .attr("class", "g")
+                    .attr("transform", function (d) {
+                    return "translate(" + x(d.hour) + ",0)";
+                });
+
+                hour.selectAll("rect")
+                    .data(function (d) {
+                        return d.types;
+                    })
+                    .enter().append("rect")
+                    .attr("width", x.rangeBand())
+                    .attr("y", function (d) {
+                    return y(d.y1);
+                })
+                    .attr("height", function (d) {
+                    return y(d.y0) - y(d.y1);
+                })
+                    .style("fill", function (d) {
+                    return color(d.name);
+                });
+                
+                // Add the text label for the x axis
+                svg.append("text")
+                    .attr("transform", "translate(" + (width / 2) + " ," + (height + margin.bottom - 5) + ")")
+                    .style("text-anchor", "middle")
+                    .text("Hour Of Day (Local 24H)");
+
+                svg.append("text")
+                    .attr("transform", "rotate(-90)")
+                    .attr("y", 0 - margin.left)
+                    .attr("x",0 - (height / 2))
+                    .attr("dy", "1em")
+                    .style("text-anchor", "middle")
+                    .text("Total Updates");
+            }
+
+            $(function() {
+                ko.applyBindings(new ViewModel());
+            });
+        </script>
+    </body>
+</html>

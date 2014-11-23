@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Supzy Sample Visualizations</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script src="js/libs/jquery/jquery.min.js" type="text/javascript"></script>
+        <script src="js/libs/jquery-csv/jquery.csv-0.71.min.js" type="text/javascript"></script>
+        <script src="js/libs/knockout/knockout-min.js" type="text/javascript"></script>        
+        <script src="js/libs/d3/d3.min.js" type="text/javascript"></script>
+        <script src="js/d3.layout.cloud.js" type="text/javascript"></script>
+        <script src="js/d3pie.min.js" type="text/javascript"></script>
+    </head>
+    <body>
+        <input type="file" id="inputCSV" data-bind="event:{change:function(){loadFile($element.files[0]);}}"/>
+        <div id="drawArea"></div>
+        <script type="text/javascript">
+            function ViewModel() {
+                var self = this;
+                self.loadFile = function(file) {
+                    var reader = new FileReader();
+                    var content = reader.readAsText(file);
+                    reader.onload = function(event) {
+                        var csv = event.target.result;
+                        var data = $.csv.toArrays(csv);
+                        data = data.slice(1); // skip the header row.
+                        // Count tokens via object shortcut, convert back to 
+                        // array, and sort to get top ranks.
+                        var countMe = data.reduce(function(map, entry) {
+                            var categories = entry[5];
+                            var catList = new Array();
+                            if (categories != "") {
+                                catList = categories.split("|");                                
+                            } else {
+                                catList.push("N/A");
+                            }
+                            for (var i = 0; i < catList.length; i++) {
+                                map[catList[i]] = (map[catList[i]] || 0) + 1;
+                            }
+                            return map;
+                        }, Object.create(null));
+
+                        var result = new Array();
+                        for (var category in countMe) {
+                            result.push({'label': category, 'value': countMe[category]});
+                        }
+                        
+                        renderData(result);
+
+                    };
+                    reader.onerror = function() {
+                        alert('Unable to read ' + file.fileName);
+                    };
+                };
+            }
+
+            function renderData(myData) {
+                var myPie = new d3pie("drawArea", {
+                    header: {
+                        title: {
+                                text: "Posts by Category"
+                        }
+                    },
+                    data: {
+                            content: myData
+                    }
+                });
+            }
+            
+
+            $(function() {
+                ko.applyBindings(new ViewModel());
+            });
+        </script>
+    </body>
+</html>
